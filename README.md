@@ -21,7 +21,7 @@ Clone the repository:
 
 Build the project:
 
-        mvn clean install
+        ./gradlew shadowJar
 
 Run the application:
 
