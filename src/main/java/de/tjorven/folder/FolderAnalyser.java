@@ -1,87 +1,82 @@
 package de.tjorven.folder;
 
-import org.apache.tika.exception.TikaException;
+import de.tjorven.MetadataListUI;
+import lombok.Getter;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.BodyContentHandler;
-import org.xml.sax.SAXException;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Getter
 public class FolderAnalyser {
 
-    Map<String, Map<String, String>> metadatas = new HashMap<>();
+    private final Map<String, Map<String, String>> metadata = new ConcurrentHashMap<>();
 
     public FolderAnalyser(Path rootPath) throws IOException {
         this.readToMap(rootPath);
     }
 
     private void readToMap(Path path) throws IOException {
-        Stream<Path> list = Files.list(path);
-        list.forEach(file -> {
-            try {
-                if (file.toFile().isDirectory()) {
-                    return;
+        // Use try-with-resources to ensure the directory stream is closed
+        try (Stream<Path> stream = Files.list(path)) {
+            // Use parallelStream to parse multiple files simultaneously (Tika is CPU intensive)
+            stream.parallel().filter(Files::isRegularFile).forEach(file -> {
+                // Use Tika's internal Tika class or AutoDetectParser with local resources
+                try (InputStream is = Files.newInputStream(file)) {
+                    Metadata tikaMetadata = new Metadata();
+                    AutoDetectParser parser = new AutoDetectParser();
+
+                    // Passing -1 to BodyContentHandler tells Tika NOT to store the text content
+                    // This saves massive amounts of memory since you only want metadata
+                    parser.parse(is, new BodyContentHandler(-1), tikaMetadata);
+
+                    Map<String, String> fileMeta = new HashMap<>();
+                    for (String name : tikaMetadata.names()) {
+                        fileMeta.put(name, tikaMetadata.get(name));
+                    }
+
+                    this.metadata.put(file.getFileName().toString(), fileMeta);
+                } catch (Exception e) {
+                    MetadataListUI.getLogger().error("Could not parse: " + file, e);
                 }
-
-                FileInputStream stream = new FileInputStream(file.toFile());
-
-                Metadata metadata = new Metadata();
-                AutoDetectParser parser = new AutoDetectParser();
-
-                // The handler is for text content; metadata is filled during parsing
-                parser.parse(stream, new BodyContentHandler(), metadata);
-
-                Map<String, String> metadatas = new HashMap<>();
-
-                for (String name : metadata.names()) {
-                    metadatas.put(name, metadata.get(name));
-                }
-
-                this.metadatas.put(file.toFile().getName(), metadatas);
-            } catch (IOException | SAXException | TikaException e) {
-                Logger.getLogger("default").log(Level.SEVERE, "Error reading files", e);
-            }
-        });
+            });
+        }
     }
 
-    public String[] getFileNames() {
-        return this.metadatas.keySet().toArray(String[]::new);
-    }
-
-    public Map<String, String> getMetadata(String file) {
-        return metadatas.get(file);
-    }
-
-    public List<Map.Entry<String, Integer>> findSimilarities() throws FileNotFoundException {
+    public List<Map.Entry<String, Integer>> findSimilarities() throws IOException {
         Map<String, Integer> matches = new HashMap<>();
-        this.metadatas.forEach((file, metadata) -> {
-            for (String metaKey : metadata.keySet()) {
-                matches.put(metaKey, matches.getOrDefault(metaKey, 0) + 1);
-            }
-        });
+        this.metadata.values().forEach(map ->
+                map.keySet().forEach(key -> matches.merge(key, 1, Integer::sum))
+        );
 
-        File file = new File("blacklist.txt");
-        FileReader fileReader = new FileReader(file);
-        BufferedReader reader = new BufferedReader(fileReader);
-        List<String> lines = reader.lines().toList();
+        Set<String> blacklist = this.loadBlacklist();
 
         return matches.entrySet().stream()
-                .filter(stringIntegerEntry -> {
-                    for (String line : lines) {
-                        if (stringIntegerEntry.getKey().startsWith(line)) {
-                            return false;
-                        }
-                    }
-                    return true;
-                })
-                .sorted((stringIntegerEntry, t1) -> t1.getValue())
+                .filter(entry -> blacklist.stream().noneMatch(b -> entry.getKey().startsWith(b)))
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .toList();
+    }
+
+    public Set<String> getFileNames() {
+        return Collections.unmodifiableSet(this.metadata.keySet());
+    }
+
+    private Set<String> loadBlacklist() {
+        Path path = Paths.get("blacklist.txt");
+        if (!Files.exists(path)) return Collections.emptySet();
+        try (Stream<String> lines = Files.lines(path)) {
+            return lines.filter(line -> !line.isBlank()).collect(Collectors.toSet());
+        } catch (IOException e) {
+            return Collections.emptySet();
+        }
     }
 }
