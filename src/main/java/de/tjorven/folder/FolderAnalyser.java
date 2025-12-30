@@ -2,6 +2,7 @@ package de.tjorven.folder;
 
 import de.tjorven.MetadataListUI;
 import lombok.Getter;
+import org.apache.tika.config.TikaConfig;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.BodyContentHandler;
@@ -30,7 +31,7 @@ public class FolderAnalyser {
             stream.parallel().filter(Files::isRegularFile).forEach(file -> {
                 try (InputStream is = Files.newInputStream(file)) {
                     Metadata tikaMetadata = new Metadata();
-                    AutoDetectParser parser = new AutoDetectParser();
+                    AutoDetectParser parser = new AutoDetectParser(TikaConfig.getDefaultConfig());
 
                     parser.parse(is, new BodyContentHandler(-1), tikaMetadata);
 
