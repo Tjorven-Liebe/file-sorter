@@ -20,6 +20,7 @@ public class SortOptionsPage extends JPanel {
 
     private final String selectedFolderPath;
     private final Map<String, Map<String, String>> fileMetadataMap;
+    private final JProgressBar progressBar = new JProgressBar();
 
     private final DefaultListModel<String> selectedLevelsModel = new DefaultListModel<>();
     private final JList<String> levelsList = new JList<>(this.selectedLevelsModel);
@@ -85,9 +86,19 @@ public class SortOptionsPage extends JPanel {
             this.updatePreview();
         });
 
+        JButton removeButton = new JButton("Remove Level");
+        removeButton.addActionListener(e -> {
+            int selectedIndex = this.levelsList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                this.selectedLevelsModel.remove(selectedIndex);
+                this.updatePreview();
+            }
+        });
+
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         btnPanel.add(combo);
         btnPanel.add(addButton);
+        btnPanel.add(removeButton);
         btnPanel.add(clearButton);
 
         panel.add(new JScrollPane(this.levelsList), BorderLayout.CENTER);
@@ -112,17 +123,28 @@ public class SortOptionsPage extends JPanel {
     }
 
     private void startSorting() {
-        if (this.selectedFolderPath == null || this.selectedLevelsModel.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please select a folder and at least one sorting level.");
-            return;
-        }
+        List<String> attributes = Collections.list(this.selectedLevelsModel.elements());
+        if (this.selectedFolderPath == null || attributes.isEmpty()) return;
 
-        try {
-            List<String> attributes = Collections.list(this.selectedLevelsModel.elements());
-            this.runFilter(Paths.get(this.selectedFolderPath), attributes);
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
-        }
+        this.progressBar.setVisible(true);
+        this.revertButton.setEnabled(false);
+
+        new Thread(() -> {
+            try {
+                this.runFilter(Paths.get(this.selectedFolderPath), attributes);
+
+                SwingUtilities.invokeLater(() -> {
+                    this.progressBar.setVisible(false);
+                    this.revertButton.setEnabled(true);
+                    JOptionPane.showMessageDialog(this, "Sorting complete!");
+                });
+            } catch (IOException ex) {
+                SwingUtilities.invokeLater(() -> {
+                    this.progressBar.setVisible(false);
+                    JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+                });
+            }
+        }).start();
     }
 
     public void runFilter(Path rootPath, List<String> selectedAttributes) throws IOException {

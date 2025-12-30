@@ -45,14 +45,14 @@ public class HomePage extends JPanel {
         this.scanBtn.setEnabled(false);
         this.scanBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
 
+        this.nextBtn = new JButton("3. Configure Sorting →");
+        this.nextBtn.setEnabled(false);
+        this.nextBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+
         this.progressBar = new JProgressBar();
         this.progressBar.setIndeterminate(true);
         this.progressBar.setVisible(false);
         this.progressBar.setMaximumSize(new Dimension(300, 20));
-
-        this.nextBtn = new JButton("3. Configure Sorting →");
-        this.nextBtn.setEnabled(false);
-        this.nextBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         this.selectBtn.addActionListener(e -> this.selectFolder());
         this.scanBtn.addActionListener(e -> this.startAnalysis());
@@ -66,7 +66,7 @@ public class HomePage extends JPanel {
         this.add(this.scanBtn);
         this.add(Box.createRigidArea(new Dimension(0, 10)));
         this.add(this.progressBar);
-        this.add(Box.createVerticalGlue()); // Push next button to bottom
+        this.add(Box.createVerticalGlue());
         this.add(this.nextBtn);
     }
 
