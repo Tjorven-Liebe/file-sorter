@@ -9,8 +9,23 @@ Safety Revert: Made a mistake? Use the Revert function to move all files back to
 Performance Optimized: Uses parallel streams and NIO.2 for fast I/O operations and efficient memory management.
 Smart Sanitization: Automatically cleans metadata values to ensure they are valid folder names across all operating systems.
 # 🚀 Getting Started
-Prerequisites:
-Java JDK 21 or higher.
+## Prerequisites
+Install Java JDK 21 or higher.
+
+## Installation
+Installation
+
+Clone the repository:
+
+        git clone https://github.com/Tjorven-Liebe/file-sorter.git
+
+Build the project:
+
+        mvn clean install
+
+Run the application:
+
+        java -jar build/libs/
 
 # 📖 How to Use
 - Select Folder: Pick the directory containing your unorganized files.
