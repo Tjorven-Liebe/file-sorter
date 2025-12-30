@@ -2,12 +2,12 @@ name: Build and Release JAR
 
 on:
   push:
-
+  
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to create the release and upload assets
+      contents: write
 
     steps:
       - name: Checkout Repository
@@ -18,19 +18,22 @@ jobs:
         with:
           java-version: '21'
           distribution: 'liberica'
-          cache: 'maven' # Change to 'gradle' if using Gradle
+          cache: 'gradle' # Corrected to gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build with Gradle
+        # Running shadowJar ensures all dependencies (Tika, etc.) are inside the JAR
         run: ./gradlew shadowJar
 
       - name: Create GitHub Release
-        id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          # This finds the .jar in the target folder
-          files: build/libs/*.jar
+          # ShadowJar usually adds '-all' to the filename
+          files: build/libs/*-all.jar 
           name: Release ${{ github.ref_name }}
-          tag_name: ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
         env:
