@@ -27,7 +27,9 @@ public class SortOptionsPage extends JPanel {
     private final DefaultListModel<String> previewModel = new DefaultListModel<>();
     private final JList<String> previewList = new JList<>(this.previewModel);
 
-    private record MoveHistory(Path source, Path target) {}
+    private record MoveHistory(Path source, Path target) {
+    }
+
     private final List<MoveHistory> lastOperationHistory = new ArrayList<>();
     private final JButton revertButton = new JButton("Revert Last Sort");
 
@@ -179,13 +181,16 @@ public class SortOptionsPage extends JPanel {
                     try {
                         while (dir != null && !dir.equals(Paths.get(this.selectedFolderPath))) {
                             try (Stream<Path> s = Files.list(dir)) {
-                                if (s.findAny().isEmpty()) {
-                                    Files.delete(dir);
-                                    dir = dir.getParent();
-                                } else break;
+                                if (s.findAny().isPresent()) {
+                                    break;
+                                }
+
+                                Files.delete(dir);
+                                dir = dir.getParent();
                             }
                         }
-                    } catch (IOException ignored) {}
+                    } catch (IOException ignored) {
+                    }
                 });
     }
 }

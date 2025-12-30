@@ -16,7 +16,7 @@ Install Java JDK 21 or higher.
 Installation
 
 Clone the repository:
-
+        
         git clone https://github.com/Tjorven-Liebe/file-sorter.git
 
 Build the project:

@@ -53,10 +53,12 @@ public class PageablePanel extends JPanel {
     }
 
     private void openPrevious() {
-        if (this.previousView != null) {
-            JPanel target = this.previousView;
-            this.previousView = null;
-            this.open(target);
+        if (this.previousView == null) {
+            return;
         }
+
+        JPanel target = this.previousView;
+        this.previousView = null;
+        this.open(target);
     }
 }
