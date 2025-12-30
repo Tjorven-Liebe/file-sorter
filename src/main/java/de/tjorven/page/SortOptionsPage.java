@@ -21,15 +21,12 @@ public class SortOptionsPage extends JPanel {
     private final String selectedFolderPath;
     private final Map<String, Map<String, String>> fileMetadataMap;
 
-    // Hierarchy Logic
     private final DefaultListModel<String> selectedLevelsModel = new DefaultListModel<>();
     private final JList<String> levelsList = new JList<>(this.selectedLevelsModel);
 
-    // Preview Logic
     private final DefaultListModel<String> previewModel = new DefaultListModel<>();
     private final JList<String> previewList = new JList<>(this.previewModel);
 
-    // History Logic
     private record MoveHistory(Path source, Path target) {}
     private final List<MoveHistory> lastOperationHistory = new ArrayList<>();
     private final JButton revertButton = new JButton("Revert Last Sort");
@@ -41,20 +38,15 @@ public class SortOptionsPage extends JPanel {
         this.setLayout(new BorderLayout(15, 15));
         this.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // --- UI COMPONENTS ---
-
-        // 1. Top: Hierarchy Builder
         JPanel controls = new JPanel(new GridLayout(1, 2, 10, 0));
         controls.add(this.createHierarchyBuilder(metadataOptions));
 
-        // 2. Center: Preview of the move
         JPanel previewPanel = new JPanel(new BorderLayout());
         previewPanel.add(new JLabel("Move Preview:"), BorderLayout.NORTH);
         this.previewList.setFont(new Font("Monospaced", Font.PLAIN, 12));
         previewPanel.add(new JScrollPane(this.previewList), BorderLayout.CENTER);
         controls.add(previewPanel);
 
-        // 3. Bottom: Execution Actions
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         this.revertButton.setEnabled(false);
         this.revertButton.addActionListener(e -> this.revertSort());
