@@ -26,10 +26,17 @@ dependencies {
 }
 
 shadowJar {
+    // Required for Shadow 9+ to allow multiple files with the same name to be processed
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    // This triggers the SPI merging logic
     mergeServiceFiles()
+
+    // Specifically handle the Tika parser file as a resource
+    append('META-INF/services/org.apache.tika.parser.Parser')
+    append('META-INF/tika-config.xml')
 
     manifest {
         attributes 'Main-Class': 'de.tjorven.MetadataListUI'
     }
-    archiveClassifier.set('all')
 }

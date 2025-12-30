@@ -30,9 +30,10 @@ public class FolderAnalyser {
         try (Stream<Path> stream = Files.list(path)) {
             stream.parallel().filter(Files::isRegularFile).forEach(file -> {
                 try (InputStream is = Files.newInputStream(file)) {
-                    Metadata tikaMetadata = new Metadata();
-                    AutoDetectParser parser = new AutoDetectParser(TikaConfig.getDefaultConfig());
+                    TikaConfig config = new TikaConfig(this.getClass().getClassLoader());
+                    AutoDetectParser parser = new AutoDetectParser(config);
 
+                    Metadata tikaMetadata = new Metadata();
                     parser.parse(is, new BodyContentHandler(-1), tikaMetadata);
 
                     Map<String, String> fileMeta = new HashMap<>();
