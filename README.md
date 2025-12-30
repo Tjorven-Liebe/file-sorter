@@ -25,7 +25,7 @@ Build the project:
 
 Run the application:
 
-        java -jar build/libs/sorter.jar
+        java -jar build/libs/FileSorter-SNAPSHOT-1.0.jar
 
 # 📖 How to Use
 - Select Folder: Pick the directory containing your unorganized files.
