@@ -50,7 +50,6 @@ public class SortOptionsPage extends JPanel {
     private void init() {
         this.setLayout(new BorderLayout());
 
-        // --- Linke Seite (Optionen & Hierarchie) ---
         JPanel leftPanel = new JPanel(new BorderLayout(10, 10));
         leftPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 5));
 
@@ -59,20 +58,17 @@ public class SortOptionsPage extends JPanel {
         topControls.add(this.createHierarchyBuilder(this.metadataOptions), BorderLayout.CENTER);
         leftPanel.add(topControls, BorderLayout.CENTER);
 
-        // --- Rechte Seite (Preview Baum) ---
         JPanel previewPanel = new JPanel(new BorderLayout());
         previewPanel.setBorder(BorderFactory.createTitledBorder("Move Preview"));
         this.previewTree.setFont(new Font("SansSerif", Font.PLAIN, 12));
         previewPanel.add(new JScrollPane(this.previewTree), BorderLayout.CENTER);
         previewPanel.setMinimumSize(new Dimension(200, 100));
 
-        // --- SplitPane (Sizeable Sidebar) ---
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, previewPanel);
-        splitPane.setDividerLocation(700); // Startbreite links
+        splitPane.setDividerLocation(700);
         splitPane.setContinuousLayout(true);
         splitPane.setOneTouchExpandable(true);
 
-        // --- Bottom Action Panel ---
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         this.revertButton.setEnabled(false);
         this.revertButton.addActionListener(e -> this.handleRevert());
@@ -97,7 +93,9 @@ public class SortOptionsPage extends JPanel {
             private int index = -1;
 
             @Override
-            public int getSourceActions(JComponent c) { return MOVE; }
+            public int getSourceActions(JComponent c) {
+                return MOVE;
+            }
 
             @Override
             protected Transferable createTransferable(JComponent c) {
@@ -122,9 +120,11 @@ public class SortOptionsPage extends JPanel {
                         if (dropIndex > this.index) dropIndex--;
                     }
                     SortOptionsPage.this.selectedLevelsModel.add(dropIndex, data);
-                    SortOptionsPage.this.updatePreview(); // Baum nach Drag & Drop aktualisieren
+                    SortOptionsPage.this.updatePreview();
                     return true;
-                } catch (Exception e) { return false; }
+                } catch (Exception e) {
+                    return false;
+                }
             }
         });
     }
