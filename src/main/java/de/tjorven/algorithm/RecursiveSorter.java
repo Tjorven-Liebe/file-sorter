@@ -29,7 +29,9 @@ public class RecursiveSorter {
         try (Stream<Path> stream = Files.list(rootPath)) {
             filesInFolder = stream.filter(Files::isRegularFile)
                     .filter(path -> {
-                        if (allowedExtensions == null || allowedExtensions.isEmpty()) return true;
+                        if (allowedExtensions == null || allowedExtensions.isEmpty()) {
+                            return true;
+                        }
                         String name = path.getFileName().toString().toLowerCase();
                         return allowedExtensions.stream().anyMatch(ext -> name.endsWith(ext.toLowerCase()));
                     })
@@ -38,7 +40,9 @@ public class RecursiveSorter {
 
         for (Path filePath : filesInFolder) {
             Map<String, String> fileMeta = this.fileMetadataMap.get(filePath.getFileName().toString());
-            if (fileMeta == null) continue;
+            if (fileMeta == null) {
+                continue;
+            }
 
             Path currentTargetDir = rootPath;
             for (String attr : selectedAttributes) {
@@ -47,7 +51,9 @@ public class RecursiveSorter {
                 currentTargetDir = currentTargetDir.resolve(folderName);
             }
 
-            if (!Files.exists(currentTargetDir)) Files.createDirectories(currentTargetDir);
+            if (!Files.exists(currentTargetDir)) {
+                Files.createDirectories(currentTargetDir);
+            }
 
             Path targetFile = currentTargetDir.resolve(filePath.getFileName());
             Files.move(filePath, targetFile, StandardCopyOption.REPLACE_EXISTING);

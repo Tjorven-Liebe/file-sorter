@@ -20,7 +20,6 @@ public class HomePage extends JPanel {
     private final List<String> metadataDropdown = new ArrayList<>();
 
     private final JLabel pathLabel;
-    private final JButton selectBtn;
     private final JButton scanBtn;
     private final JButton nextBtn;
     private final JProgressBar progressBar;
@@ -33,8 +32,8 @@ public class HomePage extends JPanel {
         title.setFont(new Font("SansSerif", Font.BOLD, 24));
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        this.selectBtn = new JButton("1. Select Folder");
-        this.selectBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        JButton selectBtn = new JButton("1. Select Folder");
+        selectBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         this.pathLabel = new JLabel("No directory selected");
         this.pathLabel.setForeground(Color.GRAY);
@@ -54,13 +53,13 @@ public class HomePage extends JPanel {
         this.progressBar.setVisible(false);
         this.progressBar.setMaximumSize(new Dimension(300, 20));
 
-        this.selectBtn.addActionListener(e -> this.selectFolder());
+        selectBtn.addActionListener(e -> this.selectFolder());
         this.scanBtn.addActionListener(e -> this.startAnalysis());
         this.nextBtn.addActionListener(e -> this.goToSortPage());
 
         this.add(title);
         this.add(Box.createRigidArea(new Dimension(0, 30)));
-        this.add(this.selectBtn);
+        this.add(selectBtn);
         this.add(this.pathLabel);
         this.add(Box.createRigidArea(new Dimension(0, 10)));
         this.add(this.scanBtn);
