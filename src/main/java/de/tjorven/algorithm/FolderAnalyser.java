@@ -1,7 +1,8 @@
-package de.tjorven.folder;
+package de.tjorven.algorithm;
 
 import de.tjorven.MetadataListUI;
 import lombok.Getter;
+import org.apache.tika.config.TikaConfig;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.BodyContentHandler;
@@ -26,17 +27,13 @@ public class FolderAnalyser {
     }
 
     private void readToMap(Path path) throws IOException {
-        // Use try-with-resources to ensure the directory stream is closed
         try (Stream<Path> stream = Files.list(path)) {
-            // Use parallelStream to parse multiple files simultaneously (Tika is CPU intensive)
             stream.parallel().filter(Files::isRegularFile).forEach(file -> {
-                // Use Tika's internal Tika class or AutoDetectParser with local resources
                 try (InputStream is = Files.newInputStream(file)) {
-                    Metadata tikaMetadata = new Metadata();
-                    AutoDetectParser parser = new AutoDetectParser();
+                    TikaConfig config = new TikaConfig(this.getClass().getClassLoader());
+                    AutoDetectParser parser = new AutoDetectParser(config);
 
-                    // Passing -1 to BodyContentHandler tells Tika NOT to store the text content
-                    // This saves massive amounts of memory since you only want metadata
+                    Metadata tikaMetadata = new Metadata();
                     parser.parse(is, new BodyContentHandler(-1), tikaMetadata);
 
                     Map<String, String> fileMeta = new HashMap<>();
@@ -46,7 +43,7 @@ public class FolderAnalyser {
 
                     this.metadata.put(file.getFileName().toString(), fileMeta);
                 } catch (Exception e) {
-                    MetadataListUI.getLogger().error("Could not parse: " + file, e);
+                    MetadataListUI.getLogger().error("Could not parse: {}", file, e);
                 }
             });
         }
@@ -72,7 +69,9 @@ public class FolderAnalyser {
 
     private Set<String> loadBlacklist() {
         Path path = Paths.get("blacklist.txt");
-        if (!Files.exists(path)) return Collections.emptySet();
+        if (!Files.exists(path)) {
+            return Collections.emptySet();
+        }
         try (Stream<String> lines = Files.lines(path)) {
             return lines.filter(line -> !line.isBlank()).collect(Collectors.toSet());
         } catch (IOException e) {

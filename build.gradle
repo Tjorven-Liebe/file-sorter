@@ -25,7 +25,14 @@ dependencies {
     implementation 'com.formdev:flatlaf-intellij-themes:3.7'
 }
 
-tasks.named('shadowJar', Jar) {
+shadowJar {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+
+    mergeServiceFiles()
+
+    append('META-INF/services/org.apache.tika.parser.Parser')
+    append('META-INF/tika-config.xml')
+
     manifest {
         attributes 'Main-Class': 'de.tjorven.MetadataListUI'
     }

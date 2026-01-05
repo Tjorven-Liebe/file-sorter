@@ -1,63 +1,77 @@
 package de.tjorven.page;
 
+import de.tjorven.algorithm.RecursiveSorter;
 import lombok.Getter;
 
 import javax.swing.*;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @Getter
 public class SortOptionsPage extends JPanel {
 
-    private final String selectedFolderPath;
-    private final Map<String, Map<String, String>> fileMetadataMap;
+    private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
-    // Hierarchy Logic
+    private final DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode("Preview Root");
+    private final DefaultTreeModel treeModel = new DefaultTreeModel(this.rootNode);
+    private final JTree previewTree = new JTree(this.treeModel);
+
     private final DefaultListModel<String> selectedLevelsModel = new DefaultListModel<>();
     private final JList<String> levelsList = new JList<>(this.selectedLevelsModel);
 
-    // Preview Logic
-    private final DefaultListModel<String> previewModel = new DefaultListModel<>();
-    private final JList<String> previewList = new JList<>(this.previewModel);
-
-    // History Logic
-    private record MoveHistory(Path source, Path target) {}
-    private final List<MoveHistory> lastOperationHistory = new ArrayList<>();
+    private final JTextField extensionFilterField = new JTextField(10);
     private final JButton revertButton = new JButton("Revert Last Sort");
+
+    private final String selectedFolderPath;
+    private final Map<String, Map<String, String>> fileMetadataMap;
+    private final RecursiveSorter recursiveSorter;
+    private final List<String> metadataOptions;
 
     public SortOptionsPage(String selectedFolderPath, Map<String, Map<String, String>> fileMetadataMap, List<String> metadataOptions) {
         this.selectedFolderPath = selectedFolderPath;
         this.fileMetadataMap = fileMetadataMap;
+        this.recursiveSorter = new RecursiveSorter(this.selectedFolderPath, this.fileMetadataMap);
+        this.metadataOptions = metadataOptions;
 
-        this.setLayout(new BorderLayout(15, 15));
-        this.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        this.init();
+    }
 
-        // --- UI COMPONENTS ---
+    private void init() {
+        this.setLayout(new BorderLayout());
 
-        // 1. Top: Hierarchy Builder
-        JPanel controls = new JPanel(new GridLayout(1, 2, 10, 0));
-        controls.add(this.createHierarchyBuilder(metadataOptions));
+        JPanel leftPanel = new JPanel(new BorderLayout(10, 10));
+        leftPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 5));
 
-        // 2. Center: Preview of the move
+        JPanel topControls = new JPanel(new BorderLayout(5, 5));
+        topControls.add(this.createFilterPanel(), BorderLayout.NORTH);
+        topControls.add(this.createHierarchyBuilder(this.metadataOptions), BorderLayout.CENTER);
+        leftPanel.add(topControls, BorderLayout.CENTER);
+
         JPanel previewPanel = new JPanel(new BorderLayout());
-        previewPanel.add(new JLabel("Move Preview:"), BorderLayout.NORTH);
-        this.previewList.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        previewPanel.add(new JScrollPane(this.previewList), BorderLayout.CENTER);
-        controls.add(previewPanel);
+        previewPanel.setBorder(BorderFactory.createTitledBorder("Move Preview"));
+        this.previewTree.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        previewPanel.add(new JScrollPane(this.previewTree), BorderLayout.CENTER);
+        previewPanel.setMinimumSize(new Dimension(200, 100));
 
-        // 3. Bottom: Execution Actions
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, previewPanel);
+        splitPane.setDividerLocation(700);
+        splitPane.setContinuousLayout(true);
+        splitPane.setOneTouchExpandable(true);
+
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         this.revertButton.setEnabled(false);
-        this.revertButton.addActionListener(e -> this.revertSort());
+        this.revertButton.addActionListener(e -> this.handleRevert());
 
         JButton runButton = new JButton("Run Recursive Sort");
         runButton.setFont(new Font("SansSerif", Font.BOLD, 14));
@@ -66,22 +80,92 @@ public class SortOptionsPage extends JPanel {
         actionPanel.add(this.revertButton);
         actionPanel.add(runButton);
 
-        this.add(controls, BorderLayout.CENTER);
+        this.add(splitPane, BorderLayout.CENTER);
         this.add(actionPanel, BorderLayout.SOUTH);
+
+        this.setupDragAndDrop();
+    }
+
+    private void setupDragAndDrop() {
+        this.levelsList.setDragEnabled(true);
+        this.levelsList.setDropMode(DropMode.INSERT);
+        this.levelsList.setTransferHandler(new SortTransferHandler());
+    }
+
+    private void updatePreview() {
+        this.rootNode.removeAllChildren();
+        this.rootNode.setUserObject(this.selectedFolderPath != null ? this.selectedFolderPath : "Preview");
+
+        if (this.fileMetadataMap == null || this.selectedLevelsModel.isEmpty()) {
+            this.treeModel.reload();
+            return;
+        }
+
+        String filterText = this.extensionFilterField.getText().toLowerCase().trim();
+        String[] allowedExtensions = filterText.isEmpty() ? new String[0] : filterText.split("[, ]+");
+
+        this.fileMetadataMap.forEach((fileName, metadata) -> {
+            if (allowedExtensions.length > 0) {
+                boolean matches = false;
+                for (String ext : allowedExtensions) {
+                    if (fileName.toLowerCase().endsWith(ext.startsWith(".") ? ext : "." + ext)) {
+                        matches = true;
+                        break;
+                    }
+                }
+                if (!matches) {
+                    return;
+                }
+            }
+
+            DefaultMutableTreeNode currentNode = this.rootNode;
+            for (int i = 0; i < this.selectedLevelsModel.size(); i++) {
+                String attr = this.selectedLevelsModel.get(i);
+                String folderName = metadata.getOrDefault(attr, "Unknown").replaceAll("[\\\\/:*?\"<>|]", "_");
+                currentNode = this.getOrCreateChild(currentNode, folderName);
+            }
+            currentNode.add(new DefaultMutableTreeNode(fileName));
+        });
+
+        this.treeModel.reload();
+        for (int i = 0; i < this.previewTree.getRowCount(); i++) {
+            this.previewTree.expandRow(i);
+        }
+    }
+
+    private DefaultMutableTreeNode getOrCreateChild(DefaultMutableTreeNode parent, String name) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            if (child.getUserObject().equals(name)) {
+                return child;
+            }
+        }
+        DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(name);
+        parent.add(newNode);
+        return newNode;
     }
 
     private JPanel createHierarchyBuilder(List<String> options) {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.add(new JLabel("Sorting Hierarchy (Artist > Album > ...)"), BorderLayout.NORTH);
+        panel.setBorder(BorderFactory.createTitledBorder("Sorting Hierarchy"));
 
         JComboBox<String> combo = new JComboBox<>(options.toArray(new String[0]));
-        JButton addButton = new JButton("Add Level");
+        JButton addButton = new JButton("Add");
+        JButton removeButton = new JButton("Remove");
         JButton clearButton = new JButton("Clear");
 
         addButton.addActionListener(e -> {
             String selected = (String) combo.getSelectedItem();
             if (selected != null && !this.selectedLevelsModel.contains(selected)) {
                 this.selectedLevelsModel.addElement(selected);
+                this.updatePreview();
+            }
+        });
+
+        removeButton.addActionListener(e -> {
+            int idx = this.levelsList.getSelectedIndex();
+            if (idx != -1) {
+                this.selectedLevelsModel.remove(idx);
                 this.updatePreview();
             }
         });
@@ -94,106 +178,94 @@ public class SortOptionsPage extends JPanel {
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         btnPanel.add(combo);
         btnPanel.add(addButton);
+        btnPanel.add(removeButton);
         btnPanel.add(clearButton);
 
         panel.add(new JScrollPane(this.levelsList), BorderLayout.CENTER);
         panel.add(btnPanel, BorderLayout.SOUTH);
-        this.updateUI();
         return panel;
     }
 
-    private void updatePreview() {
-        this.previewModel.clear();
-        if (this.fileMetadataMap == null || this.selectedLevelsModel.isEmpty()) return;
+    private JPanel createFilterPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setBorder(BorderFactory.createTitledBorder("Filter"));
+        panel.add(new JLabel("Types (e.g. mp3, flac):"));
+        panel.add(this.extensionFilterField);
 
-        this.fileMetadataMap.forEach((fileName, metadata) -> {
-            StringBuilder pathPreview = new StringBuilder();
-            for (int i = 0; i < this.selectedLevelsModel.size(); i++) {
-                String attr = this.selectedLevelsModel.get(i);
-                String val = metadata.getOrDefault(attr, "Unknown");
-                pathPreview.append(val.replaceAll("[\\\\/:*?\"<>|]", "_")).append("/");
-            }
-            this.previewModel.addElement(fileName + " -> " + pathPreview + fileName);
-        });
+        this.extensionFilterField.addActionListener(e -> this.updatePreview());
+        return panel;
     }
 
     private void startSorting() {
-        if (this.selectedFolderPath == null || this.selectedLevelsModel.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please select a folder and at least one sorting level.");
-            return;
-        }
+        List<String> attributes = Collections.list(this.selectedLevelsModel.elements());
+        String filter = this.extensionFilterField.getText();
 
+        this.executor.execute(() -> {
+            try {
+                this.recursiveSorter.runFilter(Paths.get(this.selectedFolderPath), attributes, List.of(filter));
+                SwingUtilities.invokeLater(() -> {
+                    this.revertButton.setEnabled(true);
+                    JOptionPane.showMessageDialog(this, "Sorting complete!");
+                    this.updatePreview();
+                });
+            } catch (IOException ex) {
+                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage()));
+            }
+        });
+    }
+
+    private void handleRevert() {
         try {
-            List<String> attributes = Collections.list(this.selectedLevelsModel.elements());
-            this.runFilter(Paths.get(this.selectedFolderPath), attributes);
+            this.recursiveSorter.revertSort();
+            this.revertButton.setEnabled(false);
+            this.updatePreview();
+            JOptionPane.showMessageDialog(this, "Revert complete!");
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
         }
     }
 
-    public void runFilter(Path rootPath, List<String> selectedAttributes) throws IOException {
-        this.lastOperationHistory.clear();
-        List<Path> filesInFolder;
-        try (Stream<Path> stream = Files.list(rootPath)) {
-            filesInFolder = stream.filter(Files::isRegularFile).toList();
+    private class SortTransferHandler extends TransferHandler {
+        private int index = -1;
+
+        @Override
+        public int getSourceActions(JComponent c) {
+            return MOVE;
         }
 
-        for (Path filePath : filesInFolder) {
-            Map<String, String> fileMeta = this.fileMetadataMap.get(filePath.getFileName().toString());
-            if (fileMeta == null) continue;
+        @Override
+        protected Transferable createTransferable(JComponent c) {
+            this.index = SortOptionsPage.this.levelsList.getSelectedIndex();
+            return new StringSelection(SortOptionsPage.this.levelsList.getSelectedValue());
+        }
 
-            Path currentTargetDir = rootPath;
-            for (String attr : selectedAttributes) {
-                String rawValue = fileMeta.get(attr);
-                String folderName = (rawValue == null || rawValue.isBlank()) ? "Unknown_" + attr : rawValue.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
-                currentTargetDir = currentTargetDir.resolve(folderName);
+        @Override
+        public boolean canImport(TransferSupport support) {
+            return support.isDataFlavorSupported(DataFlavor.stringFlavor);
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+            if (!this.canImport(support)) {
+                return false;
             }
 
-            if (!Files.exists(currentTargetDir)) Files.createDirectories(currentTargetDir);
-
-            Path targetFile = currentTargetDir.resolve(filePath.getFileName());
-            Files.move(filePath, targetFile, StandardCopyOption.REPLACE_EXISTING);
-            this.lastOperationHistory.add(new MoveHistory(filePath, targetFile));
-        }
-
-        this.revertButton.setEnabled(!this.lastOperationHistory.isEmpty());
-        this.updatePreview();
-        JOptionPane.showMessageDialog(this, "Successfully sorted files!");
-    }
-
-    private void revertSort() {
-        if (this.lastOperationHistory.isEmpty()) return;
-        try {
-            for (MoveHistory move : this.lastOperationHistory) {
-                if (Files.exists(move.target())) {
-                    Files.move(move.target(), move.source(), StandardCopyOption.REPLACE_EXISTING);
+            JList.DropLocation dl = (JList.DropLocation) support.getDropLocation();
+            int dropIndex = dl.getIndex();
+            try {
+                String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
+                if (this.index != -1) {
+                    SortOptionsPage.this.selectedLevelsModel.remove(this.index);
+                    if (dropIndex > this.index) {
+                        dropIndex--;
+                    }
                 }
+                SortOptionsPage.this.selectedLevelsModel.add(dropIndex, data);
+                SortOptionsPage.this.updatePreview();
+                return true;
+            } catch (Exception e) {
+                return false;
             }
-            this.cleanUpEmptyFolders();
-            this.lastOperationHistory.clear();
-            this.revertButton.setEnabled(false);
-            this.updatePreview();
-            JOptionPane.showMessageDialog(this, "Revert complete!");
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Error during revert: " + ex.getMessage());
         }
-    }
-
-    private void cleanUpEmptyFolders() {
-        this.lastOperationHistory.stream()
-                .map(move -> move.target().getParent())
-                .distinct()
-                .forEach(dir -> {
-                    try {
-                        while (dir != null && !dir.equals(Paths.get(this.selectedFolderPath))) {
-                            try (Stream<Path> s = Files.list(dir)) {
-                                if (s.findAny().isEmpty()) {
-                                    Files.delete(dir);
-                                    dir = dir.getParent();
-                                } else break;
-                            }
-                        }
-                    } catch (IOException ignored) {}
-                });
     }
 }

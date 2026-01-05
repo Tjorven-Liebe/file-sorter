@@ -14,10 +14,8 @@ public class PageablePanel extends JPanel {
     private JButton backButton;
 
     public PageablePanel() {
-        // Use BorderLayout for the main container to separate view and buttons
         this.setLayout(new BorderLayout());
 
-        // Use FlowLayout for buttons unless you specifically need SpringLayout
         this.buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         this.view = null;
 
@@ -55,10 +53,12 @@ public class PageablePanel extends JPanel {
     }
 
     private void openPrevious() {
-        if (this.previousView != null) {
-            JPanel target = this.previousView;
-            this.previousView = null; // Prevent infinite loops
-            this.open(target);
+        if (this.previousView == null) {
+            return;
         }
+
+        JPanel target = this.previousView;
+        this.previousView = null;
+        this.open(target);
     }
 }
