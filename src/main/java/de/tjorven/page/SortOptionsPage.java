@@ -89,44 +89,7 @@ public class SortOptionsPage extends JPanel {
     private void setupDragAndDrop() {
         this.levelsList.setDragEnabled(true);
         this.levelsList.setDropMode(DropMode.INSERT);
-        this.levelsList.setTransferHandler(new TransferHandler() {
-            private int index = -1;
-
-            @Override
-            public int getSourceActions(JComponent c) {
-                return MOVE;
-            }
-
-            @Override
-            protected Transferable createTransferable(JComponent c) {
-                this.index = SortOptionsPage.this.levelsList.getSelectedIndex();
-                return new StringSelection(SortOptionsPage.this.levelsList.getSelectedValue());
-            }
-
-            @Override
-            public boolean canImport(TransferSupport support) {
-                return support.isDataFlavorSupported(DataFlavor.stringFlavor);
-            }
-
-            @Override
-            public boolean importData(TransferSupport support) {
-                if (!this.canImport(support)) return false;
-                JList.DropLocation dl = (JList.DropLocation) support.getDropLocation();
-                int dropIndex = dl.getIndex();
-                try {
-                    String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
-                    if (this.index != -1) {
-                        SortOptionsPage.this.selectedLevelsModel.remove(this.index);
-                        if (dropIndex > this.index) dropIndex--;
-                    }
-                    SortOptionsPage.this.selectedLevelsModel.add(dropIndex, data);
-                    SortOptionsPage.this.updatePreview();
-                    return true;
-                } catch (Exception e) {
-                    return false;
-                }
-            }
-        });
+        this.levelsList.setTransferHandler(new SortTransferHandler());
     }
 
     private void updatePreview() {
@@ -150,7 +113,9 @@ public class SortOptionsPage extends JPanel {
                         break;
                     }
                 }
-                if (!matches) return;
+                if (!matches) {
+                    return;
+                }
             }
 
             DefaultMutableTreeNode currentNode = this.rootNode;
@@ -171,7 +136,9 @@ public class SortOptionsPage extends JPanel {
     private DefaultMutableTreeNode getOrCreateChild(DefaultMutableTreeNode parent, String name) {
         for (int i = 0; i < parent.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (child.getUserObject().equals(name)) return child;
+            if (child.getUserObject().equals(name)) {
+                return child;
+            }
         }
         DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(name);
         parent.add(newNode);
@@ -255,6 +222,50 @@ public class SortOptionsPage extends JPanel {
             JOptionPane.showMessageDialog(this, "Revert complete!");
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+        }
+    }
+
+    private class SortTransferHandler extends TransferHandler {
+        private int index = -1;
+
+        @Override
+        public int getSourceActions(JComponent c) {
+            return MOVE;
+        }
+
+        @Override
+        protected Transferable createTransferable(JComponent c) {
+            this.index = SortOptionsPage.this.levelsList.getSelectedIndex();
+            return new StringSelection(SortOptionsPage.this.levelsList.getSelectedValue());
+        }
+
+        @Override
+        public boolean canImport(TransferSupport support) {
+            return support.isDataFlavorSupported(DataFlavor.stringFlavor);
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+            if (!this.canImport(support)) {
+                return false;
+            }
+
+            JList.DropLocation dl = (JList.DropLocation) support.getDropLocation();
+            int dropIndex = dl.getIndex();
+            try {
+                String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
+                if (this.index != -1) {
+                    SortOptionsPage.this.selectedLevelsModel.remove(this.index);
+                    if (dropIndex > this.index) {
+                        dropIndex--;
+                    }
+                }
+                SortOptionsPage.this.selectedLevelsModel.add(dropIndex, data);
+                SortOptionsPage.this.updatePreview();
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 }

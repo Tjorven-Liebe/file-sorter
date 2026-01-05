@@ -69,7 +69,9 @@ public class FolderAnalyser {
 
     private Set<String> loadBlacklist() {
         Path path = Paths.get("blacklist.txt");
-        if (!Files.exists(path)) return Collections.emptySet();
+        if (!Files.exists(path)) {
+            return Collections.emptySet();
+        }
         try (Stream<String> lines = Files.lines(path)) {
             return lines.filter(line -> !line.isBlank()).collect(Collectors.toSet());
         } catch (IOException e) {

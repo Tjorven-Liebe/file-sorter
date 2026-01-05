@@ -22,23 +22,26 @@ public class MetadataListUI extends JFrame {
     private final PageablePanel pageablePanel;
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            FlatDarculaLaf.setup();
+        SwingUtilities.invokeLater(MetadataListUI::initApp);
+    }
 
-            try {
-                UIManager.setLookAndFeel(new FlatMTMaterialDeepOceanIJTheme());
-            } catch (UnsupportedLookAndFeelException e) {
-                logger.error("Error setting LAF", e);
-            }
+    private static void initApp() {
+        FlatDarculaLaf.setup();
 
-            instance = new MetadataListUI();
-            instance.setVisible(true);
-        });
+        try {
+            UIManager.setLookAndFeel(new FlatMTMaterialDeepOceanIJTheme());
+        } catch (UnsupportedLookAndFeelException e) {
+            logger.error("Error setting LAF", e);
+        }
+
+        instance = new MetadataListUI();
+        instance.setVisible(true);
     }
 
     public MetadataListUI() {
         this.setTitle("File-Sorter");
         this.setSize(1200, 600);
+
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.setLayout(new BorderLayout(10, 10));
 
