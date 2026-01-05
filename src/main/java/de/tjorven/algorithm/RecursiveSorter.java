@@ -22,11 +22,18 @@ public class RecursiveSorter {
 
     private final List<MoveHistory> lastOperationHistory = new ArrayList<>();
 
-    public void runFilter(Path rootPath, List<String> selectedAttributes) throws IOException {
+    public void runFilter(Path rootPath, List<String> selectedAttributes, List<String> allowedExtensions) throws IOException {
         this.lastOperationHistory.clear();
         List<Path> filesInFolder;
+
         try (Stream<Path> stream = Files.list(rootPath)) {
-            filesInFolder = stream.filter(Files::isRegularFile).toList();
+            filesInFolder = stream.filter(Files::isRegularFile)
+                    .filter(path -> {
+                        if (allowedExtensions == null || allowedExtensions.isEmpty()) return true;
+                        String name = path.getFileName().toString().toLowerCase();
+                        return allowedExtensions.stream().anyMatch(ext -> name.endsWith(ext.toLowerCase()));
+                    })
+                    .toList();
         }
 
         for (Path filePath : filesInFolder) {

@@ -38,7 +38,7 @@ public class MetadataListUI extends JFrame {
 
     public MetadataListUI() {
         this.setTitle("File-Sorter");
-        this.setSize(800, 600);
+        this.setSize(1200, 600);
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         this.setLayout(new BorderLayout(10, 10));
 
