@@ -7,6 +7,9 @@ import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -20,16 +23,15 @@ public class SortOptionsPage extends JPanel {
 
     private final ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
 
-    // UI Komponenten für den Baum
     private final DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode("Preview Root");
-    private final DefaultTreeModel treeModel = new DefaultTreeModel(rootNode);
-    private final JTree previewTree = new JTree(treeModel);
+    private final DefaultTreeModel treeModel = new DefaultTreeModel(this.rootNode);
+    private final JTree previewTree = new JTree(this.treeModel);
 
     private final DefaultListModel<String> selectedLevelsModel = new DefaultListModel<>();
     private final JList<String> levelsList = new JList<>(this.selectedLevelsModel);
 
+    private final JTextField extensionFilterField = new JTextField(10);
     private final JButton revertButton = new JButton("Revert Last Sort");
-    private final JProgressBar progressBar = new JProgressBar();
 
     private final String selectedFolderPath;
     private final Map<String, Map<String, String>> fileMetadataMap;
@@ -46,23 +48,34 @@ public class SortOptionsPage extends JPanel {
     }
 
     private void init() {
-        this.setLayout(new BorderLayout(15, 15));
-        this.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        this.setLayout(new BorderLayout());
 
-        JPanel controls = new JPanel(new GridLayout(1, 2, 10, 0));
-        controls.add(this.createHierarchyBuilder(this.metadataOptions));
+        // --- Linke Seite (Optionen & Hierarchie) ---
+        JPanel leftPanel = new JPanel(new BorderLayout(10, 10));
+        leftPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 5));
 
-        // Preview Panel mit JTree
+        JPanel topControls = new JPanel(new BorderLayout(5, 5));
+        topControls.add(this.createFilterPanel(), BorderLayout.NORTH);
+        topControls.add(this.createHierarchyBuilder(this.metadataOptions), BorderLayout.CENTER);
+        leftPanel.add(topControls, BorderLayout.CENTER);
+
+        // --- Rechte Seite (Preview Baum) ---
         JPanel previewPanel = new JPanel(new BorderLayout());
-        previewPanel.add(new JLabel("Move Preview (Tree View):"), BorderLayout.NORTH);
+        previewPanel.setBorder(BorderFactory.createTitledBorder("Move Preview"));
         this.previewTree.setFont(new Font("SansSerif", Font.PLAIN, 12));
         previewPanel.add(new JScrollPane(this.previewTree), BorderLayout.CENTER);
-        controls.add(previewPanel);
+        previewPanel.setMinimumSize(new Dimension(200, 100));
 
-        // Action Panel
+        // --- SplitPane (Sizeable Sidebar) ---
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, previewPanel);
+        splitPane.setDividerLocation(700); // Startbreite links
+        splitPane.setContinuousLayout(true);
+        splitPane.setOneTouchExpandable(true);
+
+        // --- Bottom Action Panel ---
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         this.revertButton.setEnabled(false);
-        this.revertButton.addActionListener(e -> handleRevert());
+        this.revertButton.addActionListener(e -> this.handleRevert());
 
         JButton runButton = new JButton("Run Recursive Sort");
         runButton.setFont(new Font("SansSerif", Font.BOLD, 14));
@@ -71,63 +84,103 @@ public class SortOptionsPage extends JPanel {
         actionPanel.add(this.revertButton);
         actionPanel.add(runButton);
 
-        this.add(controls, BorderLayout.CENTER);
+        this.add(splitPane, BorderLayout.CENTER);
         this.add(actionPanel, BorderLayout.SOUTH);
+
+        this.setupDragAndDrop();
+    }
+
+    private void setupDragAndDrop() {
+        this.levelsList.setDragEnabled(true);
+        this.levelsList.setDropMode(DropMode.INSERT);
+        this.levelsList.setTransferHandler(new TransferHandler() {
+            private int index = -1;
+
+            @Override
+            public int getSourceActions(JComponent c) { return MOVE; }
+
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                this.index = SortOptionsPage.this.levelsList.getSelectedIndex();
+                return new StringSelection(SortOptionsPage.this.levelsList.getSelectedValue());
+            }
+
+            @Override
+            public boolean canImport(TransferSupport support) {
+                return support.isDataFlavorSupported(DataFlavor.stringFlavor);
+            }
+
+            @Override
+            public boolean importData(TransferSupport support) {
+                if (!this.canImport(support)) return false;
+                JList.DropLocation dl = (JList.DropLocation) support.getDropLocation();
+                int dropIndex = dl.getIndex();
+                try {
+                    String data = (String) support.getTransferable().getTransferData(DataFlavor.stringFlavor);
+                    if (this.index != -1) {
+                        SortOptionsPage.this.selectedLevelsModel.remove(this.index);
+                        if (dropIndex > this.index) dropIndex--;
+                    }
+                    SortOptionsPage.this.selectedLevelsModel.add(dropIndex, data);
+                    SortOptionsPage.this.updatePreview(); // Baum nach Drag & Drop aktualisieren
+                    return true;
+                } catch (Exception e) { return false; }
+            }
+        });
     }
 
     private void updatePreview() {
-        // Root zurücksetzen
-        rootNode.removeAllChildren();
-        rootNode.setUserObject(selectedFolderPath != null ? selectedFolderPath : "Preview");
+        this.rootNode.removeAllChildren();
+        this.rootNode.setUserObject(this.selectedFolderPath != null ? this.selectedFolderPath : "Preview");
 
         if (this.fileMetadataMap == null || this.selectedLevelsModel.isEmpty()) {
-            treeModel.reload();
+            this.treeModel.reload();
             return;
         }
 
-        // Für jede Datei den Pfad im Baum generieren
-        this.fileMetadataMap.forEach((fileName, metadata) -> {
-            DefaultMutableTreeNode currentNode = rootNode;
+        String filterText = this.extensionFilterField.getText().toLowerCase().trim();
+        String[] allowedExtensions = filterText.isEmpty() ? new String[0] : filterText.split("[, ]+");
 
-            // Ordner-Ebenen durchlaufen
+        this.fileMetadataMap.forEach((fileName, metadata) -> {
+            if (allowedExtensions.length > 0) {
+                boolean matches = false;
+                for (String ext : allowedExtensions) {
+                    if (fileName.toLowerCase().endsWith(ext.startsWith(".") ? ext : "." + ext)) {
+                        matches = true;
+                        break;
+                    }
+                }
+                if (!matches) return;
+            }
+
+            DefaultMutableTreeNode currentNode = this.rootNode;
             for (int i = 0; i < this.selectedLevelsModel.size(); i++) {
                 String attr = this.selectedLevelsModel.get(i);
                 String folderName = metadata.getOrDefault(attr, "Unknown").replaceAll("[\\\\/:*?\"<>|]", "_");
-
-                currentNode = getOrCreateChild(currentNode, folderName);
+                currentNode = this.getOrCreateChild(currentNode, folderName);
             }
-
-            // Die Datei als Blatt (Leaf) hinzufügen
             currentNode.add(new DefaultMutableTreeNode(fileName));
         });
 
-        // Baum aktualisieren und alle Pfade aufklappen
-        treeModel.reload();
-        for (int i = 0; i < previewTree.getRowCount(); i++) {
-            previewTree.expandRow(i);
+        this.treeModel.reload();
+        for (int i = 0; i < this.previewTree.getRowCount(); i++) {
+            this.previewTree.expandRow(i);
         }
     }
 
-    /**
-     * Hilfsmethode: Findet einen Kind-Knoten oder erstellt ihn, falls nicht vorhanden.
-     */
     private DefaultMutableTreeNode getOrCreateChild(DefaultMutableTreeNode parent, String name) {
         for (int i = 0; i < parent.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (child.getUserObject().equals(name)) {
-                return child;
-            }
+            if (child.getUserObject().equals(name)) return child;
         }
         DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(name);
         parent.add(newNode);
         return newNode;
     }
 
-    // --- Restliche Hilfsmethoden (Hierarchy Builder & Logic) ---
-
     private JPanel createHierarchyBuilder(List<String> options) {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
-        panel.add(new JLabel("Sorting Hierarchy (Drag or Add Levels)"), BorderLayout.NORTH);
+        panel.setBorder(BorderFactory.createTitledBorder("Sorting Hierarchy"));
 
         JComboBox<String> combo = new JComboBox<>(options.toArray(new String[0]));
         JButton addButton = new JButton("Add");
@@ -143,7 +196,7 @@ public class SortOptionsPage extends JPanel {
         });
 
         removeButton.addActionListener(e -> {
-            int idx = levelsList.getSelectedIndex();
+            int idx = this.levelsList.getSelectedIndex();
             if (idx != -1) {
                 this.selectedLevelsModel.remove(idx);
                 this.updatePreview();
@@ -166,13 +219,23 @@ public class SortOptionsPage extends JPanel {
         return panel;
     }
 
+    private JPanel createFilterPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        panel.setBorder(BorderFactory.createTitledBorder("Filter"));
+        panel.add(new JLabel("Types (e.g. mp3, flac):"));
+        panel.add(this.extensionFilterField);
+
+        this.extensionFilterField.addActionListener(e -> this.updatePreview());
+        return panel;
+    }
+
     private void startSorting() {
         List<String> attributes = Collections.list(this.selectedLevelsModel.elements());
-        if (this.selectedFolderPath == null || attributes.isEmpty()) return;
+        String filter = this.extensionFilterField.getText();
 
         this.executor.execute(() -> {
             try {
-                this.recursiveSorter.runFilter(Paths.get(this.selectedFolderPath), attributes);
+                this.recursiveSorter.runFilter(Paths.get(this.selectedFolderPath), attributes, List.of(filter));
                 SwingUtilities.invokeLater(() -> {
                     this.revertButton.setEnabled(true);
                     JOptionPane.showMessageDialog(this, "Sorting complete!");
@@ -191,7 +254,7 @@ public class SortOptionsPage extends JPanel {
             this.updatePreview();
             JOptionPane.showMessageDialog(this, "Revert complete!");
         } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this, "Error during revert: " + ex.getMessage());
+            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
         }
     }
 }
