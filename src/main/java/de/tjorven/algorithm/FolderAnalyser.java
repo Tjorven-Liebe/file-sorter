@@ -1,4 +1,4 @@
-package de.tjorven.folder;
+package de.tjorven.algorithm;
 
 import de.tjorven.MetadataListUI;
 import lombok.Getter;

@@ -1,7 +1,7 @@
 package de.tjorven.page;
 
 import de.tjorven.MetadataListUI;
-import de.tjorven.folder.FolderAnalyser;
+import de.tjorven.algorithm.FolderAnalyser;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
